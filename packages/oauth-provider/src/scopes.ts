@@ -10,12 +10,8 @@
 
 import type { Nsid as AtcuteNsid } from "@atcute/lexicons/syntax";
 import {
-	AccountPermission,
-	BlobPermission,
-	IdentityPermission,
 	IncludeScope,
-	RepoPermission,
-	RpcPermission,
+	isAtprotoOauthScope,
 	ScopeMissingError,
 	ScopePermissionsTransition,
 	ScopesSet,
@@ -120,7 +116,13 @@ export function parseScope(
 	input: string | undefined | null,
 	{ allowIncludes = false, allowSpaceScopes = false }: ParseScopeOptions = {},
 ): ScopesSet {
-	const set = ScopesSet.fromString(input ?? "");
+	const filtered =
+		(input ?? "")
+			.split(" ")
+			.filter(Boolean)
+			.filter(isAtprotoOauthScope)
+			.join(" ") || undefined;
+	const set = ScopesSet.fromString(filtered);
 
 	if (!set.has(ATPROTO_SCOPE)) {
 		throw new ScopeParseError(
@@ -159,7 +161,7 @@ export function parseScope(
 		}
 		const parser =
 			STRUCTURAL_PARSERS[
-				resource as (typeof GRANULAR_RESOURCES)[number]
+			resource as (typeof GRANULAR_RESOURCES)[number]
 			];
 		if (!parser) {
 			throw new ScopeParseError(`Unknown scope resource: ${scope}`, scope);
@@ -213,8 +215,7 @@ export async function expandScope(
 			);
 		} catch (err) {
 			throw new ScopeParseError(
-				`Failed to resolve permission set ${include.nsid}: ${
-					err instanceof Error ? err.message : String(err)
+				`Failed to resolve permission set ${include.nsid}: ${err instanceof Error ? err.message : String(err)
 				}`,
 				token,
 			);
