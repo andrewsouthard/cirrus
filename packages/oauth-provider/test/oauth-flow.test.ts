@@ -655,7 +655,11 @@ describe("OAuth Flow", () => {
 	describe("Granular Scopes", () => {
 		async function authorizeAndToken(
 			scope: string,
-		): Promise<{ accessToken: string; keyPair: Awaited<ReturnType<typeof generateDpopKeyPair>> }> {
+		): Promise<{
+			accessToken: string;
+			grantedScope: string;
+			keyPair: Awaited<ReturnType<typeof generateDpopKeyPair>>;
+		}> {
 			const verifier = generateCodeVerifier();
 			const challenge = await generateCodeChallenge(verifier);
 			const keyPair = await generateDpopKeyPair("ES256");
@@ -707,8 +711,15 @@ describe("OAuth Flow", () => {
 			});
 
 			const tokenResponse = await provider.handleToken(tokenRequest);
-			const tokens = (await tokenResponse.json()) as { access_token: string };
-			return { accessToken: tokens.access_token, keyPair };
+			const tokens = (await tokenResponse.json()) as {
+				access_token: string;
+				scope: string;
+			};
+			return {
+				accessToken: tokens.access_token,
+				grantedScope: tokens.scope,
+				keyPair,
+			};
 		}
 
 		async function apiRequestFor(
@@ -734,6 +745,35 @@ describe("OAuth Flow", () => {
 				headers: { Authorization: `DPoP ${accessToken}`, DPoP: proof },
 			});
 		}
+
+		it("token response omits scopes that were dropped", async () => {
+			const { accessToken, grantedScope, keyPair } = await authorizeAndToken(
+				"atproto repo:app.bsky.feed.post madeup:thing",
+			);
+			// RFC 6749 §5.1: the response `scope` must describe what was granted.
+			expect(grantedScope).toBe("atproto repo:app.bsky.feed.post");
+			const data = await provider.verifyAccessToken(
+				await apiRequestFor(accessToken, keyPair),
+			);
+			expect(data?.scope).toBe("atproto repo:app.bsky.feed.post");
+			expect(data?.scope).not.toMatch(/madeup/);
+		});
+
+		it("does not store scopes it cannot interpret", async () => {
+			// `include:bad` never reaches the allowIncludes check — it is dropped
+			// by the filter first — so the thing that must be verified is that it
+			// is absent from the issued grant rather than merely un-rejected.
+			// Otherwise it would sit in storage and become a live permission the
+			// day @atproto/oauth-scopes learns to parse it.
+			const { accessToken, grantedScope, keyPair } = await authorizeAndToken(
+				"atproto repo:com.example.thing?action=read madeup:thing include:bad",
+			);
+			expect(grantedScope).toBe("atproto");
+			const data = await provider.verifyAccessToken(
+				await apiRequestFor(accessToken, keyPair),
+			);
+			expect(data?.scope).toBe("atproto");
+		});
 
 		it("issues a token carrying a granular repo scope", async () => {
 			const { accessToken, keyPair } = await authorizeAndToken(
@@ -962,7 +1002,7 @@ describe("OAuth Flow", () => {
 				code_challenge: challenge,
 				code_challenge_method: "S256",
 				state: "test-state",
-				scope: "atproto repo:not a real nsid",
+				scope: "atproto repo:app.bsky.feed.post madeup:thing",
 			});
 			const response = await provider.handlePAR(
 				new Request("https://pds.example.com/oauth/par", {
@@ -972,6 +1012,14 @@ describe("OAuth Flow", () => {
 				}),
 			);
 			expect(response.status).toBe(201);
+			// A 201 alone would pass even if nothing were filtered — the PAR
+			// record is what the authorize and token steps read, so assert the
+			// dropped token is gone from it.
+			const { request_uri: requestUri } = (await response.json()) as {
+				request_uri: string;
+			};
+			const stored = await storage.getPAR(requestUri);
+			expect(stored!.params.scope).toBe("atproto repo:app.bsky.feed.post");
 		});
 	});
 });

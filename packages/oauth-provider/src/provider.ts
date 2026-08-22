@@ -36,6 +36,7 @@ import {
 	ScopeMissingError,
 	ScopeParseError,
 	expandScope,
+	filterScope,
 	parseScope,
 	permissionsFor,
 } from "./scopes.js";
@@ -379,7 +380,7 @@ export class ATProtoOAuthProvider {
 		// accepted here when a permission-set resolver is configured; they're
 		// expanded later, at code-issuance time, so the consent UI can show
 		// bundle titles in their original include form.
-		const scope = params.scope ?? ATPROTO_SCOPE;
+		const scope = filterScope(params.scope ?? ATPROTO_SCOPE);
 		params.scope = scope;
 		const allowIncludes = !!this.permissionSetResolver;
 		try {
@@ -521,14 +522,18 @@ export class ATProtoOAuthProvider {
 
 		// Generate authorization code. Expand any include: scopes now so the
 		// stored scope contains only concrete granular permissions.
-		const requestedScope = params.scope ?? ATPROTO_SCOPE;
+		const requestedScope = filterScope(params.scope ?? ATPROTO_SCOPE);
 		let scope = requestedScope;
 		if (
 			this.permissionSetResolver &&
 			requestedScope.includes("include:")
 		) {
 			try {
-				scope = await expandScope(requestedScope, this.permissionSetResolver);
+				// Filter the expansion too — the granular scopes come out of a
+				// resolved lexicon, which is no more trustworthy than the request.
+				scope = filterScope(
+					await expandScope(requestedScope, this.permissionSetResolver),
+				);
 				parseScope(scope);
 			} catch (e) {
 				if (e instanceof ScopeParseError) {
@@ -1119,13 +1124,15 @@ export class ATProtoOAuthProvider {
 
 		// Generate authorization code, expanding any include: scopes inline.
 		const code = generateAuthCode();
-		const requestedScope = oauthParams.scope ?? ATPROTO_SCOPE;
+		const requestedScope = filterScope(oauthParams.scope ?? ATPROTO_SCOPE);
 		const allowIncludes = !!this.permissionSetResolver;
 		let scope = requestedScope;
 		try {
 			parseScope(requestedScope, { allowIncludes });
 			if (allowIncludes && requestedScope.includes("include:")) {
-				scope = await expandScope(requestedScope, this.permissionSetResolver);
+				scope = filterScope(
+					await expandScope(requestedScope, this.permissionSetResolver),
+				);
 				parseScope(scope);
 			}
 		} catch (e) {

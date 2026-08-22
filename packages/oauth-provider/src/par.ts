@@ -13,6 +13,7 @@ import {
 	ATPROTO_SCOPE,
 	ScopeParseError,
 	expandScope,
+	filterScope,
 	parseScope,
 } from "./scopes.js";
 
@@ -183,7 +184,10 @@ export class PARHandler {
 			);
 		}
 
-		const scope = params.scope ?? ATPROTO_SCOPE;
+		// Filter first, then store: the PAR record is what the authorize and
+		// token steps read, so an uninterpretable token dropped here must not
+		// survive in `params.scope`.
+		const scope = filterScope(params.scope ?? ATPROTO_SCOPE);
 		params.scope = scope;
 		const allowIncludes = !!this.permissionSetResolver;
 		try {
