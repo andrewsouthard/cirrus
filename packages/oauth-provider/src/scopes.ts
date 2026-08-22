@@ -1,8 +1,9 @@
 /**
  * Scope parsing and matching, built on @atproto/oauth-scopes.
  *
- * Granular scopes (`repo:`, `rpc:`, `blob:`, `account:`, `identity:`) are
- * parsed structurally. Permission-set includes (`include:NSID?aud=...`) are
+ * Scope tokens this version of `@atproto/oauth-scopes` cannot fully interpret
+ * are dropped rather than rejected, matching the reference provider — see
+ * {@link filterScope}. Permission-set includes (`include:NSID?aud=...`) are
  * resolved at authorize-time via an injected {@link PermissionSetResolver}
  * and expanded into concrete granular scopes inline before the auth code is
  * stored — so resource-server checks never need network access.
@@ -21,8 +22,7 @@ import type { PermissionSetResolver } from "./permission-sets.js";
 export { IncludeScope, ScopeMissingError, ScopePermissionsTransition, ScopesSet };
 
 /**
- * Resources known to the spec. Used in OAuth metadata advertisement and to
- * decide whether a scope token is structurally a granular permission.
+ * Resources known to the spec. Used in OAuth metadata advertisement.
  */
 export const GRANULAR_RESOURCES = [
 	"repo",
@@ -62,8 +62,8 @@ export class ScopeParseError extends Error {
 
 export interface ParseScopeOptions {
 	/**
-	 * When true, `include:` scopes are accepted (and structurally validated)
-	 * but not expanded — the returned ScopesSet may still contain them.
+	 * When true, well-formed `include:` scopes are accepted but not expanded —
+	 * the returned ScopesSet may still contain them.
 	 * Use this at authorize-time, then call {@link expandScope} to resolve
 	 * the includes before storing.
 	 *
@@ -75,20 +75,36 @@ export interface ParseScopeOptions {
 }
 
 /**
- * Validate a space-separated scope string. Returns the parsed ScopesSet on
- * success.
+ * Drop every scope token this version of `@atproto/oauth-scopes` cannot fully
+ * interpret, preserving the order of the survivors.
+ *
+ * Callers **must** store this filtered string rather than the raw request
+ * value: a token we can't parse today would otherwise be persisted verbatim
+ * and silently become a live permission once the scope library learns to
+ * understand it — without ever having been shown on the consent screen. It
+ * also keeps the `scope` member of the token response honest about what was
+ * actually granted (RFC 6749 §5.1).
+ */
+export function filterScope(input: string | undefined | null): string {
+	return (input ?? "")
+		.split(" ")
+		.filter(Boolean)
+		.filter(isAtprotoOauthScope)
+		.join(" ");
+}
+
+/**
+ * Validate a space-separated scope string, ignoring uninterpretable tokens.
+ * Returns the parsed ScopesSet of the surviving scopes.
+ *
+ * The set reflects the filtered input, so callers that persist or echo back a
+ * scope string need {@link filterScope} on the same input — see its docs.
  */
 export function parseScope(
 	input: string | undefined | null,
 	{ allowIncludes = false }: ParseScopeOptions = {},
 ): ScopesSet {
-	const filtered =
-		(input ?? "")
-			.split(" ")
-			.filter(Boolean)
-			.filter(isAtprotoOauthScope)
-			.join(" ") || undefined;
-	const set = ScopesSet.fromString(filtered);
+	const set = ScopesSet.fromString(filterScope(input) || undefined);
 
 	if (!set.has(ATPROTO_SCOPE)) {
 		throw new ScopeParseError(

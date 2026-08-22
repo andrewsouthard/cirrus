@@ -89,6 +89,7 @@ export {
 	ScopePermissionsTransition,
 	ScopesSet,
 	expandScope,
+	filterScope,
 	parseScope,
 	permissionsFor,
 } from "./scopes.js";
