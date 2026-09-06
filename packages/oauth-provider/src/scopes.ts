@@ -11,7 +11,12 @@
 
 import type { Nsid as AtcuteNsid } from "@atcute/lexicons/syntax";
 import {
+	AccountPermission,
+	BlobPermission,
+	IdentityPermission,
 	IncludeScope,
+	RepoPermission,
+	RpcPermission,
 	isAtprotoOauthScope,
 	ScopeMissingError,
 	ScopePermissionsTransition,
@@ -159,7 +164,11 @@ export function parseScope(
 		const colon = scope.indexOf(":");
 		const question = scope.indexOf("?");
 		const end =
-			colon === -1 ? question : question === -1 ? colon : Math.min(colon, question);
+			colon === -1
+				? question
+				: question === -1
+					? colon
+					: Math.min(colon, question);
 		const resource = end === -1 ? scope : scope.slice(0, end);
 		if (resource === "space" && !allowSpaceScopes) {
 			throw new ScopeParseError(
@@ -168,9 +177,7 @@ export function parseScope(
 			);
 		}
 		const parser =
-			STRUCTURAL_PARSERS[
-			resource as (typeof GRANULAR_RESOURCES)[number]
-			];
+			STRUCTURAL_PARSERS[resource as (typeof GRANULAR_RESOURCES)[number]];
 		if (!parser) {
 			throw new ScopeParseError(`Unknown scope resource: ${scope}`, scope);
 		}
@@ -223,7 +230,8 @@ export async function expandScope(
 			);
 		} catch (err) {
 			throw new ScopeParseError(
-				`Failed to resolve permission set ${include.nsid}: ${err instanceof Error ? err.message : String(err)
+				`Failed to resolve permission set ${include.nsid}: ${
+					err instanceof Error ? err.message : String(err)
 				}`,
 				token,
 			);
@@ -270,9 +278,7 @@ export interface FinalizeSpaceScopesOptions {
 	 * without default collections (reads unaffected, writes constrained to
 	 * the explicitly requested collections).
 	 */
-	resolveSpaceCollections?: (
-		nsid: string,
-	) => Promise<readonly string[] | null>;
+	resolveSpaceCollections?: (nsid: string) => Promise<readonly string[] | null>;
 }
 
 /**
@@ -302,24 +308,15 @@ export async function finalizeSpaceScopes(
 		}
 
 		if (perm.isSelfAuthority) {
-			perm = perm.withResolvedAuthority(
-				userDid as `did:${string}:${string}`,
-			);
+			perm = perm.withResolvedAuthority(userDid as `did:${string}:${string}`);
 		}
 
-		if (
-			!perm.hasCollections &&
-			perm.type !== "*" &&
-			resolveSpaceCollections
-		) {
+		if (!perm.hasCollections && perm.type !== "*" && resolveSpaceCollections) {
 			try {
 				const collections = await resolveSpaceCollections(perm.type);
 				if (collections && collections.length > 0) {
 					perm = perm.withDefaultCollections(
-						collections as readonly (
-							| "*"
-							| `${string}.${string}.${string}`
-						)[],
+						collections as readonly ("*" | `${string}.${string}.${string}`)[],
 					);
 				}
 			} catch {

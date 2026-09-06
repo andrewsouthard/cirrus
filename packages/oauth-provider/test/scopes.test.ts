@@ -4,20 +4,10 @@ import {
 	ATPROTO_SCOPE,
 	ScopeMissingError,
 	ScopeParseError,
-	ScopesSet,
 	expandScope,
-	parseScope,
 	permissionsFor,
-	type ParseScopeOptions,
 } from "../src/scopes.js";
-
-function parsedScopesSet(
-	scopes: string,
-	options?: ParseScopeOptions,
-): ScopesSet {
-	const parsed = parseScope(scopes, options);
-	return ScopesSet.fromString(parsed);
-}
+import { parsedScopesSet } from "./helpers.js";
 
 describe("parseScope", () => {
 	it("accepts the bare atproto scope", () => {

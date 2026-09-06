@@ -222,9 +222,7 @@ export class ATProtoOAuthProvider {
 	 * consent — unlike permission sets, the scope's meaning is fully carried
 	 * by the scope string itself.
 	 */
-	private async resolveSpaceMetadata(
-		scope: string,
-	): Promise<SpaceScopeInfo[]> {
+	private async resolveSpaceMetadata(scope: string): Promise<SpaceScopeInfo[]> {
 		if (!this.spacesEnabled) return [];
 		const spaces: SpaceScopeInfo[] = [];
 		for (const token of scope.split(" ")) {
@@ -239,22 +237,18 @@ export class ATProtoOAuthProvider {
 				this.permissionSetResolver?.resolveSpaceDeclaration
 			) {
 				try {
-					const decl =
-						await this.permissionSetResolver.resolveSpaceDeclaration(
-							perm.type as Parameters<
-								NonNullable<
-									PermissionSetResolver["resolveSpaceDeclaration"]
-								>
-							>[0],
-						);
+					const decl = await this.permissionSetResolver.resolveSpaceDeclaration(
+						perm.type as Parameters<
+							NonNullable<PermissionSetResolver["resolveSpaceDeclaration"]>
+						>[0],
+					);
 					if (decl?.name) {
 						info.name = decl.name;
 					} else {
 						info.error = "Space type declaration was not found";
 					}
 				} catch (e) {
-					info.error =
-						e instanceof Error ? e.message : "Resolution failed";
+					info.error = e instanceof Error ? e.message : "Resolution failed";
 				}
 			}
 			spaces.push(info);
@@ -280,9 +274,7 @@ export class ATProtoOAuthProvider {
 				? async (nsid) => {
 						const decl = await resolver.resolveSpaceDeclaration!(
 							nsid as Parameters<
-								NonNullable<
-									PermissionSetResolver["resolveSpaceDeclaration"]
-								>
+								NonNullable<PermissionSetResolver["resolveSpaceDeclaration"]>
 							>[0],
 						);
 						return decl?.collections ?? null;
@@ -614,7 +606,9 @@ export class ATProtoOAuthProvider {
 					requestedScope,
 					this.permissionSetResolver,
 				);
-				scope = parseScope(scope, { allowSpaceScopes: this.spacesEnabled });
+				scope = parseScope(expandedScope, {
+					allowSpaceScopes: this.spacesEnabled,
+				});
 			} catch (e) {
 				if (e instanceof ScopeParseError) {
 					const errorUrl = new URL(redirectUri);
@@ -1216,7 +1210,9 @@ export class ATProtoOAuthProvider {
 					requestedScope,
 					this.permissionSetResolver,
 				);
-				scope = parseScope(expandedScope, { allowSpaceScopes: this.spacesEnabled });
+				scope = parseScope(expandedScope, {
+					allowSpaceScopes: this.spacesEnabled,
+				});
 			}
 		} catch (e) {
 			if (e instanceof ScopeParseError) {
